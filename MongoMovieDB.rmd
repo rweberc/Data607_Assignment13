@@ -1,0 +1,108 @@
+---
+title: "Movie Reviews (mongodb)"
+author: "Ryan Weber"
+date: "April 29, 2018"
+output: 
+  html_document:
+  toc: true
+theme: united
+highlight: tango
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Database and files
+
+Files saved out: https://github.com/rweberc/Data607_Assignment13
+
+# Gather data
+
+## Setup workspace
+
+```{r setup-workspace, message=FALSE, warning=FALSE}
+library(dplyr)
+library(rmongodb)
+library(listviewer)
+```
+
+## Load data
+This project was modeled after the movie review assignment, where we stored rating data from friends in a sql database.
+
+We could either read this data in now from the MySQL database or read in from the original csv files.
+
+I left in the code from the MySQL pull and read in from the original csv files here.
+
+```{r}
+# library(RMySQL)
+
+# password <- read.table("C:/Users/weberr1/Desktop/CUNY/DATA 607/Assignment/password.csv", stringsAsFactors = FALSE)
+# mydb = dbConnect(MySQL(), user='rweberc', password=password$V1[1], dbname='reviews', host='localhost')
+
+# moviesDf <- dbGetQuery(mydb, "SELECT * FROM movies") %>% 
+#   mutate(Director = gsub("\r", "", Director))
+
+# criticsDf <- dbGetQuery(mydb, "SELECT * FROM critics") %>%
+#   mutate(LastName = gsub("\r", "", LastName))
+
+# reviewsDf <- dbGetQuery(mydb, "SELECT * FROM reviews")
+
+reviewsDf <- read.csv("https://raw.githubusercontent.com/rweberc/Data607_Assignment2/master/reviews.csv", stringsAsFactors = FALSE)
+
+moviesDf <- read.csv("https://raw.githubusercontent.com/rweberc/Data607_Assignment2/master/movies.csv", stringsAsFactors = FALSE)
+
+
+criticsDf <- read.csv("https://raw.githubusercontent.com/rweberc/Data607_Assignment2/master/critics.csv", stringsAsFactors = FALSE)
+
+```
+
+
+## Merge data
+```{r merge-data}
+mergeDf <- left_join(reviewsDf, criticsDf, by=c("CriticId"))
+mergeDf <- left_join(mergeDf, moviesDf, by=c("MovieId"))
+mergeDf <- mergeDf %>% select(Title, FirstName, LastName, Rating)
+```
+
+## Create BSON object
+```{r, create-BSON}
+mergeBSON <- mongo.bson.from.df(mergeDf)
+
+# check connection
+if (mongo.is.connected(mongo) == TRUE) {
+  
+  db <- "rmongodb"
+  
+  icoll <- paste(db, "Movie Reviews", sep=".")
+  mongo.get.database.collections(mongo, db)
+  mongo.insert(mongo, icoll, mergeBSON)
+
+  mongo.find.all(mongo, icoll)
+}
+
+```
+
+Above approach modeled after: https://mran.microsoft.com/snapshot/2015-05-10/web/packages/rmongodb/vignettes/rmongodb_introduction.html  
+
+Perhaps the movie information and the rating information should be split into two separate collections?  Is this decision clear in general (as it is with normalization in rdbms), or is it dependent on the particular way the data is expected to be used?  
+  
+One issue was, I couldn't see how to name the collection using this method as the following does not return any items:
+```{r}
+#mongo.get.database.collections(mongo, db)
+```
+
+However, I do see these objects were stored in the database:
+```{r}
+#mongo.find.all(mongo, icoll)
+```
+
+The primary advantage of the NoSQL approach is that is would allow us to scale if larger and larger datasets were used (where the cost of doing joins wouldn't be as expensive when querying).
+ 
+Also, a particular business schema could be decided on later.
+
+Primary disadvantages of the NoSQL approach seem to be that the support is not yet as ubiquitious (both in staffing and tools) for this newer technology.  Also, it seems that certain relationships between data items may be easier to maintain through foreign key restrictions in rdbms databases, but perhaps this is something that is also covered by the NoSQL approach.
+
+
+
+
